@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="
@@ -11,31 +10,28 @@
     <groupId>cl.duoc.bancoxyz</groupId>
     <artifactId>bancoxyzbatch</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-
     <packaging>pom</packaging>
 
-    <name>BancoXYZ - Semana 6</name>
-
+    <name>BancoXYZ - Semana 8</name>
     <description>
-        Proyecto agregador Maven de BancoXYZ para la implementación
-        de microservicios, configuración centralizada, Service Discovery,
-        seguridad y tolerancia a fallos con Spring Cloud.
+        Proyecto agregador Maven de BancoXYZ para microservicios,
+        configuración centralizada, descubrimiento de servicios,
+        seguridad OAuth2 y tolerancia a fallos.
     </description>
 
     <modules>
-
         <!-- Infraestructura Spring Cloud -->
-        <module>Semana 6/config-server</module>
-        <module>Semana 6/discovery-server</module>
+        <module>Semana 8/config-server</module>
+        <module>Semana 8/discovery-server</module>
 
-        <!-- API bancaria -->
-        <module>Semana 6/bank-backend</module>
+        <!-- Autenticación y API bancaria -->
+        <module>Semana 8/auth-server</module>
+        <module>Semana 8/bank-backend</module>
 
         <!-- Backend for Frontend -->
-        <module>Semana 6/bff/bff-web</module>
-        <module>Semana 6/bff/bff-mobile</module>
-        <module>Semana 6/bff/bff-atm</module>
-
+        <module>Semana 8/bff/bff-web</module>
+        <module>Semana 8/bff/bff-mobile</module>
+        <module>Semana 8/bff/bff-atm</module>
     </modules>
 
 </project>

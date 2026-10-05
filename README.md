@@ -1,40 +1,55 @@
-# 🏦 BancoXYZ — Microservicios resilientes con Spring Cloud
+# 🏦 BancoXYZ — Microservicios, OAuth2, resiliencia y mensajería con Spring Cloud
 
-> **Desarrollo Backend III (PBY2203) · Semana 6 · Grupo 13**  
-> Configuración centralizada, Service Discovery, BFF por canal, seguridad, tolerancia a fallos y observabilidad.
-
----
-
-**Repositorio:** `https://github.com/LadyRed145/bancoxyzbatch/tree/main/Semana%206`
+> **Desarrollo Backend III (PBY2203) · Semana 8 · Grupo 13**  
+> Arquitectura distribuida, OAuth2.0, Docker, Docker Compose, Resilience4j, Kafka y observabilidad.
 
 ---
 
 ## ✨ Resumen
 
-BancoXYZ evoluciona la solución de migración bancaria hacia una arquitectura distribuida basada en **Spring Boot + Spring Cloud**. La solución mantiene un `bank-backend` como API central sobre PostgreSQL y agrega tres **Backend for Frontend (BFF)** independientes para Web, Mobile y ATM.
+BancoXYZ evoluciona la solución de microservicios construida en las semanas anteriores hacia una arquitectura preparada para una ejecución reproducible mediante contenedores y con seguridad basada en **OAuth2.0**.
 
-La configuración de los BFF se centraliza mediante **Spring Cloud Config Server**, los servicios se registran en **Eureka Service Discovery**, y la comunicación hacia `BANK-BACKEND` utiliza **Spring Cloud LoadBalancer**. Cada BFF incorpora autenticación/autorización por canal y una capa de resiliencia con **Circuit Breaker, Retry, Rate Limiter, timeout y fallback**.
+La solución conserva `bank-backend` como API bancaria central sobre PostgreSQL y mantiene tres **Backend for Frontend (BFF)** independientes:
 
-La implementación fue construida como continuidad del proyecto BancoXYZ y utiliza los datos migrados a partir del repositorio legacy indicado en la actividad: `KariVillagran/bank_legacy_data`.
+- BFF Web
+- BFF Mobile
+- BFF ATM
+
+La configuración de los BFF continúa centralizada mediante **Spring Cloud Config Server**, los servicios se registran mediante **Eureka Service Discovery** y la comunicación con `bank-backend` utiliza resolución mediante Discovery y Spring Cloud LoadBalancer.
+
+Para Semana 8 se incorporan:
+
+- **Authorization Server OAuth2** mediante `auth-server`.
+- **OAuth2 Login** para BFF Web.
+- **OAuth2 Resource Server / JWT** para los servicios protegidos.
+- **Dockerfiles** para los microservicios Java.
+- **Docker Compose** para orquestar el entorno completo.
+- **Resilience4j** con Circuit Breaker, Retry, Rate Limiter, timeout y fallback.
+- **Apache Kafka** para mensajería.
+- **Kafka UI** para inspección visual del broker y topics.
+- **Spring Boot Actuator** para observabilidad.
+- Evidencias funcionales mediante navegador, consola y Postman.
 
 ---
 
 ## ✅ Estado funcional validado
 
-| Capacidad | Estado | Evidencia observada |
+| Capacidad | Estado | Evidencia |
 |---|:---:|---|
-| Config Server centralizado | ✅ | Configuración consumida por WEB, MOBILE y ATM |
-| Eureka Service Discovery | ✅ | `BANK-BACKEND`, `BFF-WEB`, `BFF-MOBILE`, `BFF-ATM` registrados |
-| Spring Cloud LoadBalancer | ✅ | Resolución de `bank-backend` mediante Discovery |
-| Autenticación | ✅ | Token ausente/desconocido → `401` |
-| Autorización por rol | ✅ | Token válido de otro canal → `403` |
-| Actuator | ✅ | Health `UP` y endpoints Resilience4j visibles |
-| Circuit Breaker | ✅ | `CLOSED → OPEN → HALF_OPEN → CLOSED` |
-| Fallback | ✅ | Backend no disponible → `503 Service Unavailable` |
-| Retry | ✅ | 3 intentos totales en operaciones GET seguras |
-| Rate Limiter | ✅ | 10 solicitudes permitidas + 20 rechazadas con `429` en ráfaga de 30 |
-| Maven multi-módulo | ✅ | Reactor `7/7 SUCCESS` |
-| Docker Compose | ✅ | Definición válida de 7 servicios |
+| OAuth2 Authorization Server | ✅ | `auth-server` operativo en `:9000` |
+| OAuth2 Login BFF Web | ✅ | Flujo de login con usuario `usuario` y acceso a `/api/web/cuentas` |
+| OAuth2 Resource Server | ✅ | Endpoints protegidos aceptan Bearer Token válido |
+| Postman + Bearer Token | ✅ | `GET http://127.0.0.1:8080/api/cuentas` → `200 OK` |
+| Config Server | ✅ | Configuración centralizada de los BFF |
+| Eureka Service Discovery | ✅ | Servicios registrados y disponibles |
+| Docker Compose | ✅ | Stack levantado y saludable |
+| PostgreSQL | ✅ | Contenedor saludable y datos disponibles |
+| Resilience4j | ✅ | Caída del backend → `503`; recuperación → `200` |
+| Circuit Breaker / Retry / Rate Limiter | ✅ | Configuración centralizada y mecanismos activos |
+| Kafka | ✅ | Broker operativo |
+| Kafka UI | ✅ | Cluster `bancoxyz` Online, 1 broker, 2 topics y 51 partitions observados |
+| Actuator | ✅ | Health y endpoints de observabilidad disponibles |
+| Recuperación del backend | ✅ | `bank-backend` detenido y posteriormente recuperado correctamente |
 
 ---
 
@@ -42,47 +57,125 @@ La implementación fue construida como continuidad del proyecto BancoXYZ y utili
 
 ```mermaid
 flowchart LR
-    WEB[Cliente Web] -->|HTTPS :8081| BFFW[BFF Web]
-    MOB[Cliente Mobile] -->|HTTPS :8082| BFFM[BFF Mobile]
-    ATM[Cliente ATM] -->|HTTPS :8083| BFFA[BFF ATM]
+    WEB[Cliente Web] -->|OAuth2 + HTTPS :8081| BFFW[BFF Web]
+    MOB[Cliente Mobile] -->|Bearer JWT + HTTPS :8082| BFFM[BFF Mobile]
+    ATM[Cliente ATM] -->|Bearer JWT + HTTPS :8083| BFFA[BFF ATM]
+
+    AUTH[Authorization Server\n:9000] -. OAuth2/JWT .-> BFFW
+    AUTH -. OAuth2/JWT .-> BFFM
+    AUTH -. OAuth2/JWT .-> BFFA
+    AUTH -. OAuth2/JWT .-> BE[Bank Backend :8080]
 
     CS[Config Server\n:8888] -. configuración .-> BFFW
     CS -. configuración .-> BFFM
     CS -. configuración .-> BFFA
 
-    BFFW -->|Discovery + LoadBalancer| BE[Bank Backend\n:8080]
+    EU[Eureka Server\n:8761] -. discovery .-> BFFW
+    EU -. discovery .-> BFFM
+    EU -. discovery .-> BFFA
+    EU -. discovery .-> BE
+
+    BFFW -->|Discovery + LoadBalancer| BE
     BFFM -->|Discovery + LoadBalancer| BE
     BFFA -->|Discovery + LoadBalancer| BE
 
-    EU[Eureka Server\n:8761] -. registro/descubrimiento .-> BFFW
-    EU -. registro/descubrimiento .-> BFFM
-    EU -. registro/descubrimiento .-> BFFA
-    EU -. registro/descubrimiento .-> BE
-
     BE --> DB[(PostgreSQL 17\n:5432)]
+    BE --> KAFKA[Kafka\n:29092]
+    KAFKA --> KUI[Kafka UI\n:8090]
 ```
-
-### Componentes
-
-| Componente | Puerto | Protocolo | Responsabilidad |
-|---|---:|---|---|
-| Config Server | `8888` | HTTP | Configuración centralizada de los BFF |
-| Eureka Server | `8761` | HTTP | Registro y descubrimiento de servicios |
-| Bank Backend | `8080` | HTTP | API bancaria central y acceso a PostgreSQL |
-| BFF Web | `8081` | HTTPS | Contrato completo para canal Web |
-| BFF Mobile | `8082` | HTTPS | Payload reducido para dispositivos móviles |
-| BFF ATM | `8083` | HTTPS | Saldo y retiro con contrato mínimo |
-| PostgreSQL | `5432` | TCP | Persistencia de los datos migrados |
 
 ---
 
-## 🛡️ Estrategia de resiliencia
+## 🧩 Componentes y puertos
 
-Los tres BFF usan la instancia Resilience4j `bankbackend`.
+| Componente | Puerto | Protocolo | Responsabilidad |
+|---|---:|---|---|
+| Authorization Server | `9000` | HTTP | Emisión de tokens OAuth2 y endpoints OIDC |
+| Config Server | `8888` | HTTP | Configuración centralizada |
+| Eureka Server | `8761` | HTTP | Registro y descubrimiento |
+| Bank Backend | `8080` | HTTP | API bancaria central |
+| BFF Web | `8081` | HTTPS | Contrato para canal Web |
+| BFF Mobile | `8082` | HTTPS | Contrato reducido para Mobile |
+| BFF ATM | `8083` | HTTPS | Operaciones de cajero |
+| PostgreSQL | `5432` | TCP | Persistencia |
+| Kafka | `9092` / `29092` | TCP | Mensajería |
+| Kafka UI | `8090` | HTTP | Administración y visualización de Kafka |
+
+Dentro de Docker, los servicios utilizan `kafka:29092` para comunicarse con Kafka.
+
+---
+
+## 🔐 Seguridad OAuth2.0
+
+### Authorization Server
+
+El proyecto incorpora `auth-server` como servidor de autorización OAuth2 en:
+
+```text
+http://localhost:9000
+```
+
+El servidor utiliza un par RSA para firmar los JWT y publica su JWK Set en:
+
+```text
+http://localhost:9000/oauth2/jwks
+```
+
+El flujo OAuth2 utiliza Authorization Code y se configuró un cliente específico para Postman.
+
+### Usuario académico
+
+```text
+usuario
+123456
+```
+
+### Cliente Postman
+
+```text
+Client ID:     bancoxyz-postman
+Client Secret: bancoxyz-postman-secret
+Callback:
+https://oauth.pstmn.io/v1/browser-callback
+```
+
+### Cliente BFF Web
+
+```text
+Client ID: bancoxyz-client
+Redirect URI:
+https://127.0.0.1:8081/login/oauth2/code/bancoxyz-client
+```
+
+### Evidencia funcional
+
+Se obtuvo un token OAuth2 y se utilizó como Bearer Token desde Postman contra:
+
+```text
+GET http://127.0.0.1:8080/api/cuentas
+```
+
+Resultado observado:
+
+```text
+200 OK
+```
+
+La respuesta contiene datos reales de las cuentas, demostrando autenticación mediante token y acceso a un endpoint protegido.
+
+---
+
+## 🛡️ Resilience4j
+
+Los BFF utilizan la instancia:
+
+```text
+bankbackend
+```
 
 ### Circuit Breaker
 
-Configuración centralizada:
+Configuración principal:
 
 ```properties
 sliding-window-type=COUNT_BASED
@@ -94,23 +187,6 @@ permitted-number-of-calls-in-half-open-state=2
 automatic-transition-from-open-to-half-open-enabled=true
 ```
 
-Comportamiento validado:
-
-```text
-CLOSED
-  │ fallos técnicos
-  ▼
-OPEN
-  │ espera configurada
-  ▼
-HALF_OPEN
-  │ probes correctos
-  ▼
-CLOSED
-```
-
-Cuando el circuito está abierto, las solicitudes no permitidas se contabilizan mediante `notPermittedCalls` y la respuesta al cliente se mantiene controlada.
-
 ### Retry
 
 ```properties
@@ -118,11 +194,9 @@ max-attempts=3
 wait-duration=200ms
 ```
 
-`max-attempts=3` significa **tres intentos totales**: llamada inicial + hasta dos reintentos.
+El Retry se aplica a fallos técnicos normalizados de las operaciones de lectura.
 
-Se reintentan únicamente fallos técnicos normalizados (`BackendNoDisponibleException` y `BackendTimeoutException`). Los errores funcionales `4xx` no se reintentan.
-
-> **Decisión de seguridad:** el `POST` de retiro del ATM **no utiliza Retry** porque no es una operación idempotente. Un reintento automático podría duplicar un débito si el backend alcanzó a procesar la operación pero la respuesta se perdió.
+El retiro ATM no utiliza Retry automático porque no es una operación idempotente.
 
 ### Rate Limiter
 
@@ -132,84 +206,92 @@ limit-refresh-period=1s
 timeout-duration=0ms
 ```
 
-Una ráfaga concurrente de 30 solicitudes produce de forma controlada respuestas `200` y `429 Too Many Requests`.
-
-El Rate Limiter se aplica por fuera del Circuit Breaker, evitando que un exceso de tráfico sea interpretado como una falla del Bank Backend.
-
-### Timeout + fallback
+### Timeout y fallback
 
 ```properties
 backend.timeout=3s
 ```
 
-Comportamiento:
+Cuando `bank-backend` está disponible, el BFF puede entregar la respuesta normal.
 
-| Situación | Respuesta |
-|---|---:|
-| Backend responde correctamente | `200` |
-| Error funcional del backend | Se conserva el status original |
-| Backend no disponible | `503 Service Unavailable` |
-| Timeout técnico | `504 Gateway Timeout` |
-| Exceso de solicitudes | `429 Too Many Requests` |
+Cuando `bank-backend` se detuvo durante la prueba, el BFF respondió:
+
+```json
+{
+  "detail": "El Bank Backend no está disponible durante: obtener el listado de cuentas",
+  "instance": "/api/web/cuentas",
+  "status": 503,
+  "title": "Bank Backend no disponible"
+}
+```
+
+Posteriormente, al volver a levantar `bank-backend`, la misma operación volvió a responder correctamente con los datos de las cuentas.
+
+Esta prueba demuestra el comportamiento controlado ante indisponibilidad y la recuperación del servicio.
 
 ---
 
-## 🔐 Seguridad
+## 📡 Kafka y Kafka UI
 
-Cada BFF usa HTTPS, sesiones stateless y Bearer Token académico asociado a un rol.
+Semana 8 incorpora Apache Kafka como componente de mensajería.
 
-| Canal | Rol | Token de demostración |
-|---|---|---|
-| Web | `ROLE_WEB` | `bancoxyz-web-demo-token-2026` |
-| Mobile | `ROLE_MOBILE` | `bancoxyz-mobile-demo-token-2026` |
-| ATM | `ROLE_ATM` | `bancoxyz-atm-demo-token-2026` |
-
-Comportamiento validado:
+El broker se ejecuta mediante:
 
 ```text
-Sin token                        -> 401 Unauthorized
-Token desconocido                -> 401 Unauthorized
-WEB token -> BFF Mobile          -> 403 Forbidden
-MOBILE token -> BFF ATM          -> 403 Forbidden
-ATM token -> BFF Web             -> 403 Forbidden
-Token correcto del canal         -> acceso permitido
+apache/kafka:4.0.0
 ```
 
-`/actuator/health` e `/actuator/info` permanecen disponibles para monitoreo. Los demás endpoints de Actuator requieren el rol correspondiente al BFF.
+Configuración interna:
 
-> Los tokens y certificados incluidos son exclusivamente académicos. En producción deben reemplazarse por OAuth2/OIDC, JWT firmados, gestión externa de secretos y certificados emitidos por una CA confiable.
+```text
+kafka:29092
+```
+
+Puerto externo:
+
+```text
+localhost:9092
+```
+
+### Kafka UI
+
+Se agregó:
+
+```text
+provectuslabs/kafka-ui:latest
+```
+
+Acceso:
+
+```text
+http://localhost:8090
+```
+
+La interfaz quedó conectada al cluster:
+
+```text
+bancoxyz
+```
+
+Evidencia observada en Kafka UI:
+
+```text
+Estado: Online
+Brokers: 1
+Topics: 2
+Partitions: 51
+Offline clusters: 0
+```
+
+Kafka UI se utiliza como herramienta de observabilidad y evidencia visual del broker y sus topics.
 
 ---
 
-## 📡 Endpoints por canal
+## 📊 Observabilidad con Actuator
 
-### Web — `https://localhost:8081`
+Los servicios exponen Spring Boot Actuator para salud y observabilidad.
 
-```text
-GET /api/web/cuentas
-GET /api/web/cuentas/{id}
-GET /api/web/cuentas/{id}/detalle
-```
-
-### Mobile — `https://localhost:8082`
-
-```text
-GET /api/mobile/cuentas
-GET /api/mobile/cuentas/{id}/resumen
-```
-
-### ATM — `https://localhost:8083`
-
-```text
-GET  /api/atm/cuentas/{id}/saldo
-POST /api/atm/cuentas/{id}/retiro
-```
-
----
-
-## 👀 Observabilidad con Actuator
-
-Los BFF exponen los endpoints necesarios para comprobar salud y resiliencia:
+Entre los endpoints utilizados se encuentran:
 
 ```text
 /actuator/health
@@ -223,12 +305,7 @@ Los BFF exponen los endpoints necesarios para comprobar salud y resiliencia:
 /actuator/ratelimiterevents
 ```
 
-La evidencia principal utiliza:
-
-- `health` para demostrar disponibilidad;
-- `circuitbreakers` para observar `CLOSED`, `OPEN` y `HALF_OPEN`;
-- `retryevents` para demostrar intentos `1`, `2` y `3`;
-- códigos HTTP reales `200/429` para demostrar el Rate Limiter.
+Los endpoints administrativos se mantienen protegidos según la configuración de seguridad de cada servicio.
 
 ---
 
@@ -243,7 +320,8 @@ bancoxyzbatch/
 ├── pom.xml
 ├── mvnw
 ├── .mvn/
-└── Semana 6/
+└── Semana 8/
+    ├── auth-server/
     ├── config-server/
     ├── discovery-server/
     ├── bank-backend/
@@ -255,298 +333,215 @@ bancoxyzbatch/
     │   ├── bff-web/
     │   ├── bff-mobile/
     │   └── bff-atm/
-    ├── data/legacy/
     ├── database/
-    │   ├── 01_schema.sql
-    │   ├── 02_seed_processed_snapshot.sql
-    │   └── README.md
-    └── scripts/
-        ├── inicializar_bd.fish
-        ├── verificar_actuator_resilience.fish
-        ├── verificar_bff.fish
-        └── verificar_retiro_controlado.fish
+    ├── scripts/
+    └── docs/
 ```
 
 ---
 
-## 🧩 Organización interna de los BFF
+## 🐳 Docker
+
+Cada microservicio Java dispone de su propio proceso de construcción mediante Docker.
+
+Los servicios Java principales son:
 
 ```text
-controller -> contrato HTTP del canal
-service    -> coordinación del caso de uso
-client     -> integración HTTP + resiliencia
-mapper     -> transformación del contrato cuando aporta valor
-dto        -> contratos de entrada/salida
-exception  -> traducción semántica de errores
-config     -> seguridad y configuración técnica
+auth-server
+config-server
+discovery-server
+bank-backend
+bff-web
+bff-mobile
+bff-atm
 ```
 
-Ningún BFF accede directamente a PostgreSQL, repositorios JPA o entidades internas del Bank Backend.
-
----
-
-## 🗃️ Datos y persistencia
-
-La solución conserva los CSV legacy y una base PostgreSQL reproducible mediante scripts SQL.
-
-El contenedor `postgres:17` carga automáticamente:
+La infraestructura adicional está compuesta por:
 
 ```text
-Semana 6/database/01_schema.sql
-Semana 6/database/02_seed_processed_snapshot.sql
+postgres
+kafka
+kafka-ui
 ```
 
-Esto permite ejecutar la Semana 6 sin depender del volumen local utilizado durante semanas anteriores.
+El `docker-compose.yml` define:
+
+- red interna `bancoxyz-net`;
+- healthchecks;
+- dependencias condicionadas por salud;
+- volumen persistente PostgreSQL;
+- variables de entorno;
+- montaje del repositorio de configuración;
+- puertos externos;
+- conexión interna de Kafka;
+- Kafka UI.
 
 ---
 
-## ⚙️ Requisitos
-
-- Java 21
-- Docker + Docker Compose
-- Fish shell para los scripts incluidos
-- `curl`
-- `jq`
-- `openssl`
-
----
-
-# 🚀 Ejecución
-
-## Opción A — Stack completo con Docker Compose
+## 🚀 Ejecución con Docker Compose
 
 Desde la raíz del proyecto:
 
-```fish
+```powershell
 docker compose config
+```
+
+Si la configuración es válida:
+
+```powershell
 docker compose up -d --build
 ```
 
 Comprobar servicios:
 
-```fish
+```powershell
 docker compose ps
 ```
 
-Detener:
+Ver logs:
 
-```fish
+```powershell
+docker compose logs -f
+```
+
+Levantar solamente Kafka y Kafka UI:
+
+```powershell
+docker compose up -d kafka kafka-ui
+```
+
+Acceder a Kafka UI:
+
+```text
+http://localhost:8090
+```
+
+Detener el stack:
+
+```powershell
 docker compose down
 ```
 
-> `docker compose down -v` elimina también el volumen PostgreSQL. Utilizarlo únicamente cuando se quiera reconstruir la base desde cero.
+> `docker compose down -v` elimina también el volumen PostgreSQL y debe utilizarse solamente cuando se quiera reconstruir la base desde cero.
 
 ---
 
-## Opción B — Ejecución local por servicios
+## 🧪 Verificaciones realizadas
 
-### 1. PostgreSQL
+### OAuth2
 
-```fish
-fish "Semana 6/scripts/inicializar_bd.fish"
-```
-
-### 2. Config Server
-
-```fish
-cd "Semana 6/config-server"
-./mvnw spring-boot:run
-```
-
-### 3. Eureka Discovery Server
-
-```fish
-cd "Semana 6/discovery-server"
-./mvnw spring-boot:run
-```
-
-### 4. Bank Backend
-
-```fish
-cd "Semana 6/bank-backend"
-./mvnw spring-boot:run
-```
-
-### 5. BFF Web
-
-```fish
-cd "Semana 6/bff/bff-web"
-./mvnw spring-boot:run
-```
-
-### 6. BFF Mobile
-
-```fish
-cd "Semana 6/bff/bff-mobile"
-./mvnw spring-boot:run
-```
-
-### 7. BFF ATM
-
-```fish
-cd "Semana 6/bff/bff-atm"
-./mvnw spring-boot:run
-```
-
-Puertos esperados:
-
-```fish
-ss -ltnp | grep -E '(:8888|:8761|:8080|:8081|:8082|:8083)'
-```
-
----
-
-## 🧱 Compilación multi-módulo
-
-Desde la raíz:
-
-```fish
-./mvnw clean compile -DskipTests
-```
-
-El reactor incluye:
+1. Inicio de sesión mediante Authorization Server.
+2. Obtención de token.
+3. Uso del token como Bearer Token en Postman.
+4. Acceso a:
 
 ```text
-config-server
- discovery-server
-bank-backend
-bff-web
-bff-mobile
-bff-atm
-BancoXYZ - Semana 6 (agregador)
+GET http://127.0.0.1:8080/api/cuentas
 ```
 
-Resultado validado durante la preparación de la entrega:
+5. Resultado:
 
 ```text
-7/7 SUCCESS
-BUILD SUCCESS
+200 OK
 ```
 
----
+### Resiliencia
 
-# 🧪 Verificación
+1. `bank-backend` operativo.
+2. Solicitud a `/api/web/cuentas` → datos correctos.
+3. `bank-backend` detenido.
+4. Solicitud a `/api/web/cuentas` → `503 Bank Backend no disponible`.
+5. `bank-backend` iniciado nuevamente.
+6. Solicitud posterior → datos correctos nuevamente.
 
-## Verificación funcional BFF
+### Kafka
 
-```fish
-fish "Semana 6/scripts/verificar_bff.fish"
-```
-
-Comprueba funcionalidad de los tres canales, HTTPS, autenticación, autorización y validaciones seguras.
-
-## Actuator + Resilience4j
-
-```fish
-fish "Semana 6/scripts/verificar_actuator_resilience.fish"
-```
-
-Es una auditoría **no destructiva** que comprueba:
-
-- Health `UP` en WEB/MOBILE/ATM.
-- Registro `bankbackend` en Circuit Breaker, Retry y Rate Limiter.
-- APIs principales con HTTP `200`.
-- Rate Limiter real mediante ráfagas concurrentes.
-- Que los `429` no contaminen el Circuit Breaker.
-
-## Retiro controlado
-
-```fish
-fish "Semana 6/scripts/verificar_retiro_controlado.fish"
-```
-
-La prueba utiliza un fixture controlado para demostrar el flujo ATM sin alterar permanentemente las cuentas utilizadas como evidencia.
-
----
-
-## 🔥 Prueba manual de Retry y Circuit Breaker
-
-Para demostrar tolerancia a fallos se detiene **únicamente** `bank-backend` y se mantienen activos Config Server, Eureka y los tres BFF.
-
-Con backend caído, una lectura segura devuelve `503` y `/actuator/retryevents` registra:
+Kafka UI mostró:
 
 ```text
-attempt 1 -> RETRY
-attempt 2 -> RETRY
-attempt 3 -> ERROR
+Cluster bancoxyz: Online
+1 broker
+2 topics
+51 partitions
+0 clusters offline
 ```
-
-Al superar el umbral configurado, el Circuit Breaker transiciona a `OPEN`. Posteriormente pasa automáticamente a `HALF_OPEN`; con el backend recuperado y dos probes correctos vuelve a `CLOSED`.
 
 ---
 
-## 📸 Documentación de evidencias
+## 📸 Evidencias recomendadas para la entrega
 
-La documentación final de ejecución se entrega como archivo separado:
+Se recomienda conservar capturas de:
 
-```text
-BancoXYZ_BFF_Evidencias_Semana6.pdf
-```
-
-El documento contiene las evidencias mínimas y suficientes para la Semana 6:
-
-1. compilación completa `7/7 SUCCESS`;
-2. configuración centralizada mediante Config Server;
-3. registro de servicios en Eureka;
-4. ejecución de las APIs Web, Mobile y ATM sobre los datos migrados;
-5. autenticación `401` y autorización cruzada `403`;
-6. auditoría de Actuator y mecanismos Resilience4j;
-7. Retry de tres intentos en los tres canales;
-8. Circuit Breaker en `OPEN` con solicitudes no permitidas;
-9. recuperación `HALF_OPEN -> CLOSED`;
-10. repositorio GitHub final de Semana 6.
-
-La documentación y sus capturas se mantienen fuera del repositorio de código para evitar duplicar artefactos de entrega.
+1. `docker compose ps` mostrando los servicios saludables.
+2. Auth Server funcionando.
+3. Login OAuth2 del BFF Web.
+4. Postman con Bearer Token y respuesta `200 OK`.
+5. Caída de `bank-backend` y respuesta `503`.
+6. Recuperación de `bank-backend` y respuesta normal.
+7. Kafka UI mostrando el cluster `bancoxyz`.
+8. Kafka UI mostrando los topics.
+9. Eureka con los servicios registrados.
+10. Actuator mostrando salud y mecanismos de resiliencia.
 
 ---
 
-## 🎯 Correspondencia con la pauta de Semana 6
+## 🎯 Correspondencia con la pauta de Semana 8
 
-| Criterio | Implementación |
+| Criterio | Implementación / evidencia |
 |---|---|
-| Config Server funcional y centralizado | Configuración externa para los tres BFF mediante `config-repo` |
-| Service Discovery con tres microservicios | Eureka registra los tres BFF y adicionalmente `BANK-BACKEND` |
-| Tres microservicios con tolerancia a fallos y autenticación | WEB, MOBILE y ATM incluyen Circuit Breaker, Retry seguro, Rate Limiter, fallback y seguridad |
-| Autenticación y autorización funcional | Bearer Tokens + roles específicos + respuestas `401/403` |
+| OAuth2.0 — 20 pts | Authorization Server, Authorization Code, JWT, BFF Web OAuth2 Login, Resource Server y prueba Postman |
+| Docker — 20 pts | Dockerfiles para los microservicios Java y ejecución mediante contenedores |
+| Docker Compose — 20 pts | Orquestación del stack completo, healthchecks, dependencias, red y volumen |
+| Resilience4j — 20 pts | Circuit Breaker, Retry, Rate Limiter, timeout y fallback; prueba de caída y recuperación |
+| Kafka/JMS — 15 pts | Apache Kafka operativo y Kafka UI conectado al broker |
+| Código, documentación y evidencias — 5 pts | Código fuente, README, Propuesta Técnica y capturas funcionales |
 
 ---
 
-## 🧠 Decisiones de diseño destacadas
+## ☁️ Ejecución en entorno Cloud
 
-- Configuración de resiliencia fuera del código Java mediante Config Server.
-- Service Discovery evita acoplar los BFF a una IP fija del backend.
-- Retry sólo para operaciones de lectura/idempotentes.
-- Retiro ATM excluido de Retry para impedir dobles débitos.
-- Rate Limiter externo al Circuit Breaker para que un `429` no cuente como falla del backend.
-- BFF desacoplados de persistencia.
-- Errores técnicos traducidos a códigos HTTP semánticos.
-- Actuator utilizado como evidencia observable del estado interno.
-- Contenedores con healthchecks y dependencias explícitas.
-- Configuración sensible externalizable mediante variables de entorno.
+La solución queda preparada para ser trasladada a un entorno Cloud mediante Docker Compose.
+
+La estrategia de despliegue considera una instancia AWS EC2 dedicada para la evaluación, utilizando Docker como runtime y manteniendo la misma composición de servicios.
+
+La validación realizada hasta este punto corresponde al entorno local. La ejecución en la nueva instancia EC2 se documentará como una etapa posterior del despliegue.
 
 ---
 
-## 🌱 Evolución productiva
+## 🧠 Decisiones técnicas destacadas
 
-Para un despliegue real se recomienda incorporar:
-
-- OAuth2 / OpenID Connect.
-- JWT firmados y de corta duración.
-- Secret manager externo.
-- Certificados TLS emitidos por una CA.
-- TLS interno entre servicios.
-- Métricas centralizadas con Prometheus/Grafana u otra plataforma equivalente.
-- Trazabilidad distribuida.
-- Testcontainers.
-- Pipeline CI/CD.
-- Gestión de configuración por ambientes.
+- OAuth2.0 reemplaza el esquema anterior de tokens académicos como mecanismo principal de seguridad.
+- `auth-server` centraliza la emisión y validación de credenciales OAuth2.
+- BFF Web utiliza OAuth2 Login y sesión autenticada.
+- Los servicios protegidos utilizan JWT como Resource Server.
+- Config Server mantiene las políticas operativas fuera del código.
+- Eureka evita acoplamiento directo por IP entre microservicios.
+- Retry se limita a operaciones de lectura seguras.
+- El retiro ATM no utiliza Retry automático por su naturaleza no idempotente.
+- Rate Limiter limita exceso de tráfico antes de afectar el Circuit Breaker.
+- Fallback entrega respuestas HTTP semánticas ante fallos técnicos.
+- Kafka desacopla la mensajería del ecosistema.
+- Kafka UI facilita la observación del broker durante la evaluación.
+- Docker Compose permite reproducir el entorno completo.
+- Actuator permite observar salud y estado operativo.
 
 ---
 
 ## 📌 Nota académica
 
-Los tokens, certificados y valores por defecto existen para facilitar una ejecución reproducible en el entorno académico. No representan una configuración de seguridad recomendada para producción.
+Los usuarios, secretos, certificados y demás valores de configuración utilizados durante la demostración son exclusivamente académicos.
+
+En un entorno productivo se recomienda utilizar:
+
+- OAuth2/OIDC con un proveedor de identidad administrado;
+- secretos mediante un Secret Manager;
+- certificados emitidos por una CA confiable;
+- TLS interno entre servicios;
+- observabilidad centralizada;
+- trazabilidad distribuida;
+- CI/CD;
+- configuración separada por ambientes.
 
 ---
 
-**BancoXYZ · Semana 6 — Microservicios resilientes, observables y protegidos con Spring Cloud.**
+**BancoXYZ · Semana 8 — Microservicios, OAuth2.0, resiliencia, Docker y Kafka.**
