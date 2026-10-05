@@ -1,6 +1,5 @@
 package cl.duoc.bancoxyz.bffweb.config;
 
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -41,21 +40,6 @@ public class SecurityConfig {
 
                         .anyRequest()
                         .denyAll()
-                )
-
-                .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(
-                                (request, response, exception) ->
-                                        response.sendError(
-                                                HttpServletResponse.SC_UNAUTHORIZED
-                                        )
-                        )
-                        .accessDeniedHandler(
-                                (request, response, exception) ->
-                                        response.sendError(
-                                                HttpServletResponse.SC_FORBIDDEN
-                                        )
-                        )
                 )
 
                 .oauth2Login(oauth2 ->
